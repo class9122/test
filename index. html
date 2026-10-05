@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raw Magnetometer By Logger</title>
+
+<style>
+    body {
+        font-family: monospace;
+        background: #111;
+        color: #eee;
+        padding: 15px;
+    }
+
+    button {
+        font-size: 18px;
+        padding: 12px 20px;
+        margin-bottom: 15px;
+    }
+
+    #current {
+        font-size: 30px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+
+    #stats {
+        white-space: pre-line;
+        margin-bottom: 15px;
+    }
+
+    #log {
+        height: 55vh;
+        overflow-y: auto;
+        background: #000;
+        padding: 10px;
+        border: 1px solid #444;
+        font-size: 13px;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>Raw Magnetometer — By</h2>
+
+<button id="start">START SENSOR</button>
+
+<div id="current">By: -- µT</div>
+
+<div id="stats">
+Samples: 0
+Rate: -- Hz
+Min: --
+Max: --
+Range: --
+Δ from previous: --
+</div>
+
+<div id="log"></div>
+
+<script>
+
+let sensor;
+
+let sampleCount = 0;
+let firstTime = null;
+let lastTime = null;
+let lastBy = null;
+
+let minBy = Infinity;
+let maxBy = -Infinity;
+
+const current = document.getElementById("current");
+const stats = document.getElementById("stats");
+const log = document.getElementById("log");
+const startButton = document.getElementById("start");
+
+function addLog(text) {
+    const line = document.createElement("div");
+    line.textContent = text;
+    log.appendChild(line);
+
+    // Keep the newest data visible
+    log.scrollTop = log.scrollHeight;
+
+    // Prevent the page from growing forever
+    if (log.children.length > 1000) {
+        log.removeChild(log.firstChild);
+    }
+}
+
+async function startMagnetometer() {
+
+    if (!("Magnetometer" in window)) {
+        addLog("ERROR: Magnetometer API is not supported.");
+        return;
+    }
+
+    try {
+
+        sensor = new Magnetometer({
+            frequency: 60,
+            referenceFrame: "device"
+        });
+
+        sensor.addEventListener("reading", () => {
+
+            const now = performance.now();
+
+            const by = sensor.y;
+
+            sampleCount++;
+
+            if (firstTime === null) {
+                firstTime = now;
+            }
+
+            let dt = "--";
+            let delta = "--";
+
+            if (lastTime !== null) {
+                dt = (now - lastTime).toFixed(2);
+
+                if (lastBy !== null) {
+                    delta = (by - lastBy).toFixed(4);
+                }
+            }
+
+            lastTime = now;
+            lastBy = by;
+
+            minBy = Math.min(minBy, by);
+            maxBy = Math.max(maxBy, by);
+
+            const elapsed = (now - firstTime) / 1000;
+
+            const rate =
+                elapsed > 0
+                ? (sampleCount / elapsed).toFixed(1)
+                : "--";
+
+            const range =
+                maxBy - minBy;
+
+            current.textContent =
+                "By: " + by.toFixed(4) + " µT";
+
+            stats.textContent =
+`Samples: ${sampleCount}
+Rate: ${rate} Hz
+Min: ${minBy.toFixed(4)}
+Max: ${maxBy.toFixed(4)}
+Range: ${range.toFixed(4)}
+Δ from previous: ${delta} µT`;
+
+            /*
+             * Timestamp | By | change | interval
+             */
+            addLog(
+                `${now.toFixed(2)} ms | ` +
+                `By=${by.toFixed(4)} µT | ` +
+                `Δ=${delta} | ` +
+                `dt=${dt} ms`
+            );
+        });
+
+        sensor.addEventListener("error", event => {
+
+            addLog(
+                "SENSOR ERROR: " +
+                event.error.name +
+                " - " +
+                event.error.message
+            );
+
+        });
+
+        sensor.start();
+
+        addLog("Sensor started.");
+        addLog("Requested frequency: 60 Hz");
+        addLog("Reading: magnetometer.y");
+        addLog("Reference frame: device");
+
+    } catch (error) {
+
+        addLog(
+            "START ERROR: " +
+            error.name +
+            " - " +
+            error.message
+        );
+    }
+}
+
+startButton.addEventListener("click", startMagnetometer);
+
+</script>
+
+</body>
+</html>
